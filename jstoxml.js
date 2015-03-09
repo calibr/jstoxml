@@ -1,19 +1,19 @@
 var toXML = function(obj, config){
+  
   // include XML header
-  config = config || {};
-  var out = '';
-  if(config.header) {
-    if(typeof config.header == 'string') {
-      out = config.header;
-    } else {
-      out = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    }
-  }
+  config = config || {
+    header: true
+  };
+  var out = config.header ? '<?xml version="1.0" encoding="UTF-8"?>\n' : '';
   
   var origIndent = config.indent || '';
   indent = '';
 
   var filter = function customFilter(txt) {
+    
+  return "<![CDATA["+txt+"]]>";
+  
+    /*
     if(!config.filter) return txt;
     var mappings = config.filter;
     var replacements = [];
@@ -21,9 +21,10 @@ var toXML = function(obj, config){
       if(!mappings.hasOwnProperty(map)) continue;
       replacements.push(map);
     }
-    return String(txt).replace(new RegExp('(' + replacements.join('|') + ')', 'g'), function(str, entity) {
+    return txt.replace(new RegExp('(' + replacements.join('|') + ')', 'g'), function(str, entity) {
       return mappings[entity] || '';
     });
+    */
   };
   
   // helper function to push a new line to the output
@@ -60,7 +61,7 @@ var toXML = function(obj, config){
     outputString += (tag.indent || '') + '<' + (tag.closeTag ? '/' : '') + tag.name + (!tag.closeTag ? attrsString : '') + (tag.selfCloseTag ? '/' : '') + '>';
     
     // if the tag only contains a text string, output it and close the tag
-    if(tag.text || tag.text === ''){
+    if(tag.text){
       outputString += filter(tag.text) + '</' + tag.name + '>';
     }
     
@@ -88,29 +89,23 @@ var toXML = function(obj, config){
     // iterable object
     for(var key in obj){
       var type = typeof obj[key];
-
       if(obj.hasOwnProperty(key) && (obj[key] || type === 'boolean' || type === 'number')){
         fn({_name: key, _content: obj[key]}, indent);
-      //} else if(!obj[key]) {   // null value (foo:'')
-      } else if(obj.hasOwnProperty(key) && obj[key] === null) {   // null value (foo:null)
-        fn(key, indent);       // output the keyname as a string ('foo')
-      } else if(obj.hasOwnProperty(key) && obj[key] === '') {
-        // blank string
-        outputTag({
-          name: key,
-          text: ''
-        });
+      } else if( !obj[key] && typeof obj[key] != "undefined" ) {   // null value (foo:'')
+       // fn(key, indent);       // output the keyname as a string ('foo')
+      push( "<"+key+"/>" );
       }
     }
   };
   
   var convert = function convert(input, indent){
+
     var type = typeof input;
     
     if(!indent) indent = '';
     
     if(Array.isArray(input)) type = 'array';
-    
+
     var path = {
       'string': function(){
         push(indent + filter(input));
@@ -125,7 +120,9 @@ var toXML = function(obj, config){
       },
       
       'array': function(){
+          
         every(input, convert, indent);
+      
       },
       
       'function': function(){
@@ -151,7 +148,7 @@ var toXML = function(obj, config){
           outputTag(outputTagObj);
           return;
         }
-        
+            
         var objContents = {
           'string': function(){
             outputTagObj.text = input._content;
@@ -171,16 +168,30 @@ var toXML = function(obj, config){
           'object': function(){  // or Array
             outputTag(outputTagObj);
             
-            every(input._content, convert, indent + origIndent);
+      var isArray = Array.isArray( input._content );
+      
+            every(input._content, function( aInput, aIndent ){
+        
+        if( isArray ){
+          push( "<item>" );
+          convert( aInput, aIndent );
+          push( "</item>" );          
+        }
+        else{
+          convert( aInput, aIndent );
+        }
+        
+      }, indent + origIndent);
             
             outputTagObj.closeTag = true;
             outputTag(outputTagObj);
-          },
-          
+          }
+          /*
           'function': function(){
             outputTagObj.text = input._content();  // () to execute the fn
             outputTag(outputTagObj);
           }
+          */
         };
         
         if(objContents[type]) objContents[type]();
@@ -193,7 +204,7 @@ var toXML = function(obj, config){
   
   convert(obj, indent);
   
-  return out;
+  return "<root>" + out + "</root>";
 };
 
 exports.toXML = toXML;
